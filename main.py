@@ -35,7 +35,7 @@ def mk_to_csv(out):
 
 # board.print_packets_in()
 
-gui = Gui(nchannels=8)
+gui = Gui(channel_names=list(map(str, range(8))))
 cmds = {}
 threads = []
 board = None
@@ -90,6 +90,7 @@ def cmd_help(args):
     else:
         print(cmds[args[0]][0])
 
+
 @defcmd('file', '<file># - replay file')
 @in_thread
 def cmd_file(args):
@@ -98,13 +99,17 @@ def cmd_file(args):
         for l in csv.reader(inp):
             if not should_run:
                 break
-            gui.callback(l)
-            # time.sleep(0.05)
+            gui.callback(list(map(float,l)))
+            time.sleep(0.03)
 
 @defcmd('connect', '[port]# - connect to board')
 def cmd_connect(args):
     port = args[0] if args and len(args) > 1 else '/dev/ttyUSB0'
     board = bci.OpenBCICyton(port=port, scaled_output=False, log=True)
+
+@defcmd('stream', '[file]# - start stream; file name for stream record')
+def cmd_stream(args):
+    pass
 
 @defcmd('c', '<command># - command to send to the board')
 def cmd_c(args):
@@ -130,5 +135,5 @@ loop.start()
 gui.start()
 
 loop.join()
-# for t in threads:
-    # t.join()
+for t in threads:
+    t.join()
