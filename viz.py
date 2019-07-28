@@ -91,7 +91,7 @@ def_points('N', lambda i: 0, lambda i: -0.4, range(1))
 
 class Map:
     def __init__(self, c, topology, x1, y1, x2, y2):
-        dim = max(x2-x1, y1-y2)
+        dim = min(abs(x2-x1), abs(y2-y1))
         # nose
         c.create_polygon(
             [
