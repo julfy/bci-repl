@@ -15,7 +15,7 @@ c_dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.077
 c_dy = lambda i: 0
 def_points('C', c_dx, c_dy, range(7))
 def_points('T', c_dx, c_dy, range(7,7+4))
-def_points('A', ) # ear refs
+# def_points('A', ) # ear refs
 # FC, FT
 fc_dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.075
 fc_dy = lambda i: -1 * (0.075 + 0.002* pow(ceil(i/2.0), 2) )
@@ -56,3 +56,10 @@ def_points('O', p_dx, p_dy, range(3))
 def_points('I', lambda i: 0, lambda i: 0.4, range(1))
 
 top_8c_10_20 = ['FZ', 'CZ', 'P3', 'PZ', 'P4', 'PO7', 'PO8', 'OZ' ]
+
+topologies = {
+    'top_8c_10_20': top_8c_10_20
+}
+
+def get_topology(name):
+    return topologies[name]

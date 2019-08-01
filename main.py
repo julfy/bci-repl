@@ -18,6 +18,8 @@ def mk_to_csv(out):
         out.write('{}\n'.format(a))
     return callback
 
+NCHANNELS=8
+
 # board.ser.write(b'v')
 # time.sleep(0.100)
 
@@ -34,13 +36,10 @@ def mk_to_csv(out):
 # print(board.streaming)
 
 # board.print_packets_in()
-from topology import top_8c_10_20, coords
-all = [k for k,v in coords.items()]
-print(len(all))
-gui = Gui(channel_names=all)
 cmds = {}
 threads = []
 board = None
+gui = None
 
 class ArgError(Exception):
     pass
@@ -73,12 +72,14 @@ def in_thread(f):
         threads.append(t)
     return wrap
 
+## COMMANDS ###
 
 @defcmd(['exit', 'q'], '# - stop everything and exit repl')
 def cmd_exit(args):
     utils.should_run = False
     time.sleep(0.5)
-    gui.root.quit()
+    if gui:
+        gui.quit()
 
 @defcmd(['help', 'h'], '[cmd]# - show help')
 def cmd_help(args):
@@ -90,6 +91,13 @@ def cmd_help(args):
         raise ArgError(str(args))
     else:
         print(cmds[args[0]][0])
+
+@defcmd('gui','# - start GUI')
+def cmd_gui(args):
+    global gui
+    from topology import get_topology
+    gui = Gui(channels=get_topology(args[0]))
+    gui.start()
 
 @defcmd('file', '<file># - replay file')
 @in_thread
@@ -104,6 +112,7 @@ def cmd_file(args):
 
 @defcmd('connect', '[port]# - connect to board')
 def cmd_connect(args):
+    global board
     port = args[0] if args and len(args) > 1 else '/dev/ttyUSB0'
     board = bci.OpenBCICyton(port=port, scaled_output=False, log=True)
 
@@ -121,10 +130,15 @@ def cmd_c(args):
 @in_thread
 def cmd_rand(args):
     from utils import gen_rand
-    gen_rand(8, gui.callback)
+    gen_rand(NCHANNELS, gui.callback)
 
 def repl():
     while utils.should_run:
+        try:
+            if gui:
+                gui.update()
+        except Exception:
+            pass
         full_cmd = input("> ").split(' ')
         cmd = full_cmd[0]  # catch exn
         args = full_cmd[1:]
@@ -135,11 +149,10 @@ def repl():
         else:
             print('Unknown cmd: {}'.format(cmd))
 
-loop = Thread(target=repl)
-loop.start()
+if __name__ == '__main__':
+    cmd_gui(['top_8c_10_20'])
+    cmd_rand(1)
 
-gui.start()
-
-loop.join()
-for t in threads:
-    t.join()
+    repl()
+    for t in threads:
+        t.join()

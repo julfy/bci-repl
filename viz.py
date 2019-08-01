@@ -37,6 +37,7 @@ class Channel:
         if len(self.items) >= self.maxlen:
             d = self.items.popleft()
             c.delete(d)
+
         c.move('ln', -self.step, 0)
         # TODO: color coded style?
         color = 'blue'
@@ -107,10 +108,26 @@ class Gui:
     W=1400
     started = False
 
-    def __init__(self, channel_names: List[str]):
-        self.root = tk.Tk()
-        self.nchannels = len(channel_names)
+    def __init__(self, channels: List[str]):
+        self.last_update = 0.
+        self.channeln = channels
+        self.nchannels = len(channels)
         self.channels = [] # type: List[Channel]
+        self.root = None
+        self.c = None
+
+    def update(self):
+        if self.root:
+            self.root.update_idletasks()
+            self.root.update()
+
+    def quit(self):
+        if self.root:
+            self.update()
+            self.root.quit()
+
+    def start(self):
+        self.root = tk.Tk()
         self.c = tk.Canvas(self.root, height=self.H, width=self.W, bg='#ddffdd')
         self.c.pack()
         # Init EEG
@@ -123,15 +140,15 @@ class Gui:
                 step=5,
                 H=cheight,
                 W=self.W-self.H-20, # 10 for gaps on both sides
-                name=channel_names[i]
+                name=self.channeln[i]
             )
             self.channels.append(channel)
         # Init Map
-        self.map = Map(self.c, channel_names, x1=self.W-self.H, y1=0, x2=self.W, y2=self.H)
+        self.map = Map(self.c, self.channeln, x1=self.W-self.H, y1=0, x2=self.W, y2=self.H)
 
-    def start(self):
         self.root.call('wm', 'attributes', '.', '-topmost', '1')
-        self.root.mainloop()
+        self.root.title('O-BCI')
+        self.root.update()
 
     def callback(self, vec : List[float]):
         for i in range(self.nchannels):
