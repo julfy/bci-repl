@@ -6,6 +6,8 @@ from mttkinter import mtTkinter
 import time
 import random
 
+from topology import coords
+
 # inframe = tk.Frame()
 # innercanvas = tk.Canvas(inframe, width=100, height=100, bg='green')
 # innercanvas.pack()
@@ -27,7 +29,7 @@ class Channel:
         self.canvas = tk.Canvas(inframe, width=W, height=H,  bg='#dadada')
         self.canvas.pack()
         c.create_window(10, offset, anchor=tk.NW, window=inframe)
-        self.name = self.canvas.create_text(10, 10, text=name)
+        self.name = self.canvas.create_text(20, 10, text=name)
 
 
     def update(self, v: float):
@@ -44,53 +46,18 @@ class Channel:
             self.max = a
             # print('MAX: {:2f}'.format(a))
             color = 'red'
-        scaled = 1 if self.max == 0 else v/self.max
+        scaled = -1 if self.max == 0 else -v/self.max # inverted because Y axis is inverted
         pt = int(scaled * (half-1) + half)
 
         l = c.create_line(self.W-self.step, self.last, self.W, pt, fill=color, tags='ln')
         self.items.append(l)
         self.last = pt
 
-coords = {}
-side = -1
-from math import ceil
-
-# dy : <1|-1>=inverted y direction * (<offset> + <y step>)
-# dx : pow(-1, i)=x direction * ceil(i/2.0)=number of steps * <step size>
-# C
-def def_points(prefix, dx, dy, range):
-    for i in range:
-        name = '{}{}'.format(prefix, 'Z' if i == 0 else i)
-        coords.update({name: (dx(i), dy(i))})
-
-# C, T
-dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.077
-dy = lambda i: 0
-def_points('C', dx, dy, range(7))
-def_points('T', dx, dy, range(7,7+4))
-# FC, FT
-dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.075
-dy = lambda i: -1 * (0.075 + 0.002* pow(ceil(i/2.0), 2) )
-def_points('FC', dx, dy, range(7))
-def_points('FT', dx, dy, range(7,7+4))
-# F
-dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.065
-dy = lambda i: -1 * (0.15 + 0.0035* pow(ceil(i/2.0), 2) )
-def_points('F', dx, dy, range(11))
-# AF
-dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.09
-dy = lambda i: -1 * (0.23 + 0.009* pow(ceil(i/2.0), 2) )
-def_points('AF', dx, dy, range(5))
-# Fp
-dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.09
-dy = lambda i: -1 * (0.32 - 0.005* pow(ceil(i/2.0), 2) )
-def_points('Fp', dx, dy, range(3))
-# N
-def_points('N', lambda i: 0, lambda i: -0.4, range(1))
-
-
 class Map:
     def __init__(self, c, topology, x1, y1, x2, y2):
+        self.points = []
+        self.max = 0.
+        self.c = c
         dim = min(abs(x2-x1), abs(y2-y1))
         # nose
         c.create_polygon(
@@ -106,16 +73,32 @@ class Map:
         x0 = x1+dim/2
         y0 = y1+dim/2
         diameter = int(dim/30)
-        for name, (dx, dy) in coords.items():
+        for name in topology:
             # print('{} {} {}'.format(n, dx, y0+dim*dy))
-            c.create_oval(
+            dx,dy = coords[name]
+            p = c.create_oval(
                 x0+dim*dx-diameter,
                 y0+dim*dy-diameter,
                 x0+dim*dx+diameter,
                 y0+dim*dy+diameter,
                 fill='white'
             )
+            self.points.append(p)
             c.create_text(x0+dim*dx, y0+dim*dy, text=name)
+
+    def update_points(self, vec):
+        for i in range(len(self.points)):
+            v = vec[i]
+            a = abs(v)
+            if a > self.max:
+                self.max = a
+                # print('MAX: {:2f}'.format(a))
+            chanv = 255 - int((1 if self.max == 0 else a/self.max) * 255) % 256
+            if v < 0:
+                clr = '#{:02x}{:02x}ff'.format(chanv,chanv)
+            else:
+                clr = '#ff{:02x}{:02x}'.format(chanv,chanv)
+            self.c.itemconfig(self.points[i], fill=clr)
 
 
 class Gui:
@@ -153,3 +136,4 @@ class Gui:
     def callback(self, vec : List[float]):
         for i in range(self.nchannels):
             self.channels[i].update(vec[i])
+        self.map.update_points(vec)

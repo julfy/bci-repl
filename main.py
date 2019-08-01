@@ -1,6 +1,6 @@
 import time
 
-from utils import should_run, gen_rand
+import utils
 
 from openbci import cyton as bci
 import numpy as np
@@ -34,8 +34,10 @@ def mk_to_csv(out):
 # print(board.streaming)
 
 # board.print_packets_in()
-
-gui = Gui(channel_names=list(map(str, range(8))))
+from topology import top_8c_10_20, coords
+all = [k for k,v in coords.items()]
+print(len(all))
+gui = Gui(channel_names=all)
 cmds = {}
 threads = []
 board = None
@@ -71,13 +73,12 @@ def in_thread(f):
         threads.append(t)
     return wrap
 
+
 @defcmd(['exit', 'q'], '# - stop everything and exit repl')
 def cmd_exit(args):
-    global should_run
-    should_run = False
+    utils.should_run = False
     time.sleep(0.5)
     gui.root.quit()
-    exit(0)
 
 @defcmd(['help', 'h'], '[cmd]# - show help')
 def cmd_help(args):
@@ -90,14 +91,13 @@ def cmd_help(args):
     else:
         print(cmds[args[0]][0])
 
-
 @defcmd('file', '<file># - replay file')
 @in_thread
 def cmd_file(args):
     import csv
     with open(args[0], 'r') as inp:
         for l in csv.reader(inp):
-            if not should_run:
+            if not utils.should_run:
                 break
             gui.callback(list(map(float,l)))
             time.sleep(0.03)
@@ -117,17 +117,23 @@ def cmd_c(args):
         raise Exception('Board not present!')
     board.ser_write(bytes(' '.join(args)))
 
+@defcmd('rand', '<start|stop># - generate random noise')
+@in_thread
+def cmd_rand(args):
+    from utils import gen_rand
+    gen_rand(8, gui.callback)
+
 def repl():
-    global should_run
-    while should_run:
+    while utils.should_run:
         full_cmd = input("> ").split(' ')
         cmd = full_cmd[0]  # catch exn
         args = full_cmd[1:]
-        if cmd in cmds:
+        if cmd == '':
+            pass
+        elif cmd in cmds:
             cmds[cmd][1](args)
         else:
             print('Unknown cmd: {}'.format(cmd))
-    print('exit')
 
 loop = Thread(target=repl)
 loop.start()
