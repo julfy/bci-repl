@@ -141,8 +141,8 @@ def repl():
             print('Unknown cmd: {}'.format(cmd))
 
 if __name__ == '__main__':
-    cmd_gui(['top_8c_10_20'])
-    cmd_rand([])
+    # cmd_gui(['top_8c_10_20'])
+    # cmd_rand([])
     # cmd_sstart([])
 
     repl()
