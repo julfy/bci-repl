@@ -8,13 +8,11 @@ import random
 
 from topology import coords
 
-# inframe = tk.Frame()
-# innercanvas = tk.Canvas(inframe, width=100, height=100, bg='green')
-# innercanvas.pack()
-# c.create_window(200, 200, window=inframe)
-# p=c.coords(ol)
+class Panel:
+    def update(self):
+        raise Exception('Not implemented!')
 
-class Channel:
+class VoltageChannel:
     def __init__(self, c, offset, step, H, W, name=None):
         self.H = H
         self.W = W
@@ -39,7 +37,6 @@ class Channel:
             c.delete(d)
 
         c.move('ln', -self.step, 0)
-        # TODO: color coded style?
         color = 'blue'
         a = abs(v)
         half = int(self.H/2)
@@ -54,9 +51,31 @@ class Channel:
         self.items.append(l)
         self.last = pt
 
-class Map:
+class Voltages(Panel):
+    def __init__(self, c, channels, x1, y1, x2, y2):
+        self.c = c
+        self.channels = [] # type: List[VoltageChannel]
+        self.nchannels = len(channels)
+        cheight = int(((y2-y1)-10*(self.nchannels+1))/self.nchannels)
+        for i in range(self.nchannels):
+            offset = y1+10+(cheight+10)*i
+            channel = VoltageChannel(
+                self.c,
+                offset,
+                step=5,
+                H=cheight,
+                W=x2-x1-20, # 10 for gaps on both sides
+                name=channels[i]
+            )
+            self.channels.append(channel)
+
+    def update(self, vec):
+        for i in range(self.nchannels):
+            self.channels[i].update(vec[i])
+
+class HeadMap(Panel):
     def __init__(self, c, topology, x1, y1, x2, y2):
-        self.points = []
+        self.points = [] # type: List[int]
         self.max = 0.
         self.c = c
         dim = min(abs(x2-x1), abs(y2-y1))
@@ -87,7 +106,7 @@ class Map:
             self.points.append(p)
             c.create_text(x0+dim*dx, y0+dim*dy, text=name)
 
-    def update_points(self, vec):
+    def update(self, vec):
         for i in range(len(self.points)):
             v = vec[i]
             a = abs(v)
@@ -96,9 +115,9 @@ class Map:
                 # print('MAX: {:2f}'.format(a))
             chanv = 255 - int((1 if self.max == 0 else a/self.max) * 255) % 256
             if v < 0:
-                clr = '#{:02x}{:02x}ff'.format(chanv,chanv)
+                clr = '#{0:02x}{0:02x}ff'.format(chanv)
             else:
-                clr = '#ff{:02x}{:02x}'.format(chanv,chanv)
+                clr = '#ff{0:02x}{0:02x}'.format(chanv)
             self.c.itemconfig(self.points[i], fill=clr)
 
 
@@ -110,9 +129,9 @@ class Gui:
 
     def __init__(self, channels: List[str]):
         self.last_update = 0.
-        self.channeln = channels
+        self.channels = channels
         self.nchannels = len(channels)
-        self.channels = [] # type: List[Channel]
+        self.panels = [] # type: List[Panel]
         self.root = None
         self.c = None
 
@@ -126,31 +145,47 @@ class Gui:
             self.update()
             self.root.quit()
 
+    def _on_wheel_up(self, event):
+        self.c.yview_scroll(-1, "units")
+    def _on_wheel_down(self, event):
+        self.c.yview_scroll(1, "units")
+
     def start(self):
         self.root = tk.Tk()
         self.c = tk.Canvas(self.root, height=self.H, width=self.W, bg='#ddffdd')
         self.c.pack()
-        # Init EEG
-        cheight = int((self.H-10*(self.nchannels+1))/self.nchannels)
-        for i in range(self.nchannels):
-            offset = 10+(cheight+10)*i
-            channel = Channel(
-                self.c,
-                offset,
-                step=5,
-                H=cheight,
-                W=self.W-self.H-20, # 10 for gaps on both sides
-                name=self.channeln[i]
-            )
-            self.channels.append(channel)
+        self.root.bind_all("<Button-4>", self._on_wheel_up)
+        self.root.bind_all("<Button-5>", self._on_wheel_down)
+        # myscrollbar=tk.Scrollbar(self.root,orient="vertical",command=self.c.yview)
+        # self.c.configure(yscrollcommand=myscrollbar.set)
+        # myscrollbar.pack(side="right")
+        self.panels.append(Voltages(
+            self.c,
+            self.channels,
+            x1=0,
+            y1=0,
+            x2=self.W-self.H,
+            y2=self.H
+        ))
         # Init Map
-        self.map = Map(self.c, self.channeln, x1=self.W-self.H, y1=0, x2=self.W, y2=self.H)
+        self.panels.append(HeadMap(
+            self.c,
+            self.channels,
+            x1=self.W-self.H,
+            y1=0,
+            x2=self.W,
+            y2=self.H
+        ))
 
-        self.root.call('wm', 'attributes', '.', '-topmost', '1')
+        self.root.call('wm', 'attributes', '.', '-topmost', '1') # always on fg
         self.root.title('O-BCI')
         self.root.update()
 
-    def callback(self, vec : List[float]):
-        for i in range(self.nchannels):
-            self.channels[i].update(vec[i])
-        self.map.update_points(vec)
+    def process_sample(self, sample):
+        from utils import simple_scale
+        return simple_scale(sample)
+
+    def callback(self, sample):
+        vec = self.process_sample(sample)
+        for p in self.panels:
+            p.update(vec)

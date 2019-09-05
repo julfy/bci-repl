@@ -7,35 +7,8 @@ import numpy as np
 from viz import Gui
 from threading import Thread
 
-SCALE_FACTOR_EEG = (4500000)/24/(2**23-1) #uV/count
-SCALE_FACTOR_AUX = 0.002 / (2**4)
-
-def mk_to_csv(out):
-    def callback(sample):
-        a = np.array(sample.channel_data)*SCALE_FACTOR_EEG
-        a = np.array2string(a, max_line_width=999999, separator=',')[1:-1]
-        # print('{}\n'.format(a))
-        out.write('{}\n'.format(a))
-    return callback
-
 NCHANNELS=8
 
-# board.ser.write(b'v')
-# time.sleep(0.100)
-
-# board.ser_write(b'[')
-# time.sleep(0.100)
-
-# need thread
-# with open('test.csv', 'w') as out:
-#     board.start_streaming(mk_to_csv(out))
-
-# board.ser.write(b'b')
-# board.streaming = True
-
-# print(board.streaming)
-
-# board.print_packets_in()
 cmds = {}
 threads = []
 board = None
@@ -99,9 +72,9 @@ def cmd_gui(args):
     gui = Gui(channels=get_topology(args[0]))
     gui.start()
 
-@defcmd('file', '<file># - replay file')
+@defcmd('csv', '<csv># - replay preprocessed csv file')
 @in_thread
-def cmd_file(args):
+def cmd_csv(args):
     import csv
     with open(args[0], 'r') as inp:
         for l in csv.reader(inp):
@@ -116,29 +89,47 @@ def cmd_connect(args):
     port = args[0] if args and len(args) > 1 else '/dev/ttyUSB0'
     board = bci.OpenBCICyton(port=port, scaled_output=False, log=True)
 
-@defcmd('stream', '[file]# - start stream; file name for stream record')
-def cmd_stream(args):
-    pass
+@defcmd('sstart', '[file]# - start stream; file name for stream record')
+def cmd_sstart(args):
+    from utils import open_record, sample_to_csv
+
+    fname = None if len(args) == 0 else args[0]
+    out = open_record(name=fname)
+    def cb(sample):
+        sample_to_csv(out, sample)
+        process_cb(sample)
+    if board:
+        board.start_streaming(cb)
+
+@defcmd('sstop', '# - stop stream')
+def cmd_sstop(args):
+    if board and board.streaming:
+        board.stop()
 
 @defcmd('c', '<command># - command to send to the board')
 def cmd_c(args):
     if not board:
         raise Exception('Board not present!')
-    board.ser_write(bytes(' '.join(args)))
+    board.ser_write(' '.join(args).encode())
 
 @defcmd('rand', '<start|stop># - generate random noise')
 @in_thread
-def cmd_rand(args):
+def cmd_rand(_args):
     from utils import gen_rand
-    gen_rand(NCHANNELS, gui.callback)
+    gen_rand(NCHANNELS, process_cb)
+
+
+# lazy way to define default callback
+def process_cb(sample):
+    gui.callback(sample)
 
 def repl():
     while utils.should_run:
-        try:
-            if gui:
-                gui.update()
-        except Exception:
-            pass
+        # try:
+        #     if gui:
+        #         gui.update()
+        # except Exception:
+        #     pass
         full_cmd = input("> ").split(' ')
         cmd = full_cmd[0]  # catch exn
         args = full_cmd[1:]
@@ -151,7 +142,8 @@ def repl():
 
 if __name__ == '__main__':
     cmd_gui(['top_8c_10_20'])
-    cmd_rand(1)
+    cmd_rand([])
+    # cmd_sstart([])
 
     repl()
     for t in threads:

@@ -58,6 +58,7 @@ def_points('I', lambda i: 0, lambda i: 0.4, range(1))
 top_8c_10_20 = ['FZ', 'CZ', 'P3', 'PZ', 'P4', 'PO7', 'PO8', 'OZ' ]
 
 topologies = {
+    'all': [k for k in coords.keys()],
     'top_8c_10_20': top_8c_10_20
 }
 
