@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#sudo chmod a+rw /dev/ttyUSB0
+
 rlwrap=$(which rlwrap)
 
 if [[ -z $rlwrap ]]; then

@@ -1,14 +1,25 @@
 from math import ceil
 
-coords = {}
+class Electrode:
+    def __init__(self, name, x, y):
+        self.name = name
+        # Positions for gui
+        self.x = x
+        self.y = y
+
+electrodes = {}
+
+##########################
+# Electrode Declarations #
+##########################
 
 # dy : <1|-1>=inverted y direction * (<offset> + <y step>)
 # dx : pow(-1, i)=x direction * ceil(i/2.0)=number of steps * <step size>
-# C
+
 def def_points(prefix, dx, dy, range):
     for i in range:
         name = '{}{}'.format(prefix, 'Z' if i == 0 else i)
-        coords.update({name: (dx(i), dy(i))})
+        electrodes.update({name: Electrode(name, dx(i), dy(i))})
 
 # C, T
 c_dx = lambda i: pow(-1, i) * ceil(i/2.0) * 0.077
@@ -55,10 +66,14 @@ def_points('O', p_dx, p_dy, range(3))
 # I
 def_points('I', lambda i: 0, lambda i: 0.4, range(1))
 
+##############
+# Topologies #
+##############
+
 top_8c_10_20 = ['FZ', 'CZ', 'P3', 'PZ', 'P4', 'PO7', 'PO8', 'OZ' ]
 
 topologies = {
-    'all': [k for k in coords.keys()],
+    'all': [k for k in electrodes.keys()],
     'top_8c_10_20': top_8c_10_20
 }
 
