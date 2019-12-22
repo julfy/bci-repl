@@ -294,6 +294,12 @@ class Gui:
         t = Thread(target=self.refresh_canvas, name = 'gui_refresh_canvas')
         t.start()
 
+    # def start(self):
+    #     import sys
+    #     from PyQt5.QtWidgets import QWidget, QApplication
+    #     from PyQt5.QtGui import QPainter, QColor, QFont
+    #     from PyQt5.QtCore import Qt
+
     def refresh_canvas(self):
         while utils.should_run:
             self.mtx.acquire(blocking=True)

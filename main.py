@@ -3,7 +3,7 @@ import traceback
 from threading import Thread
 from functools import reduce
 
-from typing import Optional
+from typing import Optional, Any, Callable
 
 from openbci import cyton as bci
 import numpy as np
@@ -18,7 +18,8 @@ G_board = None
 G_gui = None
 G_callback_seq = [utils.simple_scale]
 
-def G_callback(inp):
+
+def G_callback(inp: Any) -> Any:  # returns same type as inp
     res = inp
     for f in G_callback_seq:
         res = f(res)
@@ -26,7 +27,7 @@ def G_callback(inp):
     # return reduce(lambda val, f: f(val), G_callback_seq, initial=inp)
 
 
-def G_add_callback(f):
+def G_add_callback(f: Callable[[Any], Any]) -> None:
     global G_callback_seq
     G_callback_seq.append(f)
 
@@ -148,18 +149,30 @@ def cmd_sstop(args):
 
 
 @defcmd('vstart', '<file># - start video with data collection')
-@in_thread
+# @in_thread
 def cmd_vstart(args):
-    import video
+    import subprocess
+    import os
+    from vlc_ctrl.player import Player
 
     inp_file = get_arg(args, 0)
     if not inp_file or len(inp_file) <= 0:
         raise ArgError('Video file name expected')
-    v = video.Video(inp_file)
-    cmd_sstart(args[1:])
-    v.run()
-    cmd_sstop([])
 
+    with open(os.devnull,"w") as out:
+        p = Player()
+        subprocess.Popen(['vlc', inp_file], stderr=out)
+        time.sleep(0.5) # give some time to launch
+        p.get_dbus_interface()
+        duration = float(p.track_info()['length'])+1
+        p.pause()
+        time.sleep(0.5)
+        # do the board setup
+        p.prev() # reset the timing
+        print('Running video sequence')
+        time.sleep(duration)
+        # stop recording
+        p.quit(None, None, 0)
 
 @defcmd('c', '<command># - command to send to the board')
 def cmd_c(args):
@@ -170,7 +183,7 @@ def cmd_c(args):
 
 @defcmd('rand', '<start|stop># - generate random noise')
 @in_thread
-def cmd_rand(_args):
+def cmd_rand(*args: Any) -> None:
     from utils import gen_rand, gen_sin
     gen_rand(G_params.sampling_rate, G_callback)
 
@@ -185,7 +198,7 @@ def cmd_rand(_args):
 #     G_callback(vec)
 
 
-def repl():
+def repl() -> None:
     while utils.should_run:
         full_cmd = input(">>> ").split(' ') # TODO: escape chars
         # def read_cmd():
@@ -217,10 +230,10 @@ if __name__ == '__main__':
 
     G_params = utils.Parameters(sampling_rate=250, topology_name='top_8c_10_20')
     G_add_callback(utils.make_time_tracker(G_params.sampling_rate))
-    # cmd_vstart(['sample.mp4'])
-    cmd_record([])
-    cmd_gui([])
-    cmd_rand([])
+    cmd_vstart(['sample.mp4'])
+    # cmd_record([])
+    # cmd_gui([])
+    # cmd_rand([])
     # cmd_sstart([])
 
     repl()
@@ -232,5 +245,5 @@ if __name__ == '__main__':
     # profiler.stop()
     # print(profiler.output_text(unicode=True, color=True, show_all=True))
 
-    yappi.get_func_stats().print_all()
-    yappi.get_thread_stats().print_all()
+    # yappi.get_func_stats().print_all()
+    # yappi.get_thread_stats().print_all()
