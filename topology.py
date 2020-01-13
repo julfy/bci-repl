@@ -1,3 +1,5 @@
+from typing import List
+
 from math import ceil
 
 class Electrode:
@@ -71,11 +73,19 @@ def_points('I', lambda i: 0, lambda i: 0.4, range(1))
 ##############
 
 top_8c_10_20 = ['FZ', 'CZ', 'P3', 'PZ', 'P4', 'PO7', 'PO8', 'OZ' ]
+top_16c_10_10 = [ # occipital
+    'FZ',
+    'C5', 'CZ', 'C6',
+    'P7', 'P3', 'PZ', 'P4', 'P8',
+    'PO7', 'PO3', 'POZ', 'PO4', 'PO8',
+    'O1', 'O2']
 
 topologies = {
     'all': [k for k in electrodes.keys()],
-    'top_8c_10_20': top_8c_10_20
+    'top_8c_10_20': top_8c_10_20,
+    'top_16c_10_10': top_16c_10_10
 }
 
-def get_topology(name):
+
+def get_topology(name: str) -> List[str]:
     return topologies[name]

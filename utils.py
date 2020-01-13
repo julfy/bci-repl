@@ -1,37 +1,35 @@
-import random
+from typing import MutableSequence, List, Callable, TypeVar, IO, Type, Optional, Any
+T = TypeVar('T')
+
 import time
 from threading import Thread
 from datetime import datetime
-import signal
-import os
 from collections import deque
 
-from typing import List, Callable
-
-from openbci import cyton as bci
 import numpy as np
-
-from topology import get_topology
 
 
 should_run = True
 
-class Parameters:
-    def __init__(self, sampling_rate: int, topology_name: str):
-        self.sampling_rate = sampling_rate
-        self.topology_name = topology_name
-        self.electrode_topology = get_topology(topology_name)
-        self.nchannels = len(self.electrode_topology)
-
-def should_stop():
+def should_stop() -> None:
     global should_run
     should_run = False
 
-def make_time_tracker(srate):
+def period_function(period: float, target: Callable) -> Callable:
+    last = time.time()
+    period = period
+    def f() -> Any:
+        nonlocal last, period
+        if time.time() - last >= period:
+            last = time.time()
+            return target()
+    return f
+
+def make_time_tracker(srate: int) -> Callable[[T], T]:
     t0 = time.time()
     srate = srate
     ctr = srate
-    def f(x=None): #  take and return same value to allow adding to callbeck sequence
+    def f(x: T) -> T:
         nonlocal ctr, t0, srate
         ctr -= 1
         if ctr <=0:
@@ -43,32 +41,6 @@ def make_time_tracker(srate):
     return f
 
 
-def gen_rand(n_channels, callback : Callable[[bci.OpenBCISample], None]):
-    cnt = 0
-    global should_run
-    while should_run:
-        sample = bci.OpenBCISample(None, [random.randrange(-255,255)] * n_channels, None)
-        callback(sample)
-        time.sleep(1.0/250.0)
-        cnt+=1
-        if cnt >= 1000:
-            should_stop()
-            break
-
-def gen_sin(n_channels, callback : Callable[[bci.OpenBCISample], None]):
-    phase = 0
-    cnt = 0
-    global should_run
-    while should_run:
-        sample = bci.OpenBCISample(None, [np.sin(phase+i)*5 for i in range(n_channels)]*n_channels, None)
-        phase+=0.005
-        callback(sample)
-        time.sleep(1.0/250.0)
-        cnt+=1
-        if cnt > 1000:
-            os._exit(0)
-
-
 class FFTCollector():
     def __init__(self, sampling_rate: int, seq_overlap: float, seq_len: int, nchannels: int):
         self.nchannels = nchannels
@@ -76,70 +48,70 @@ class FFTCollector():
         self.num_samples = seq_len
         self.seq_period = int(self.num_samples * (1.0 - seq_overlap))
         self.sample_counter = self.num_samples  # first time full
-        self.channel_buffers = []
+        self.channel_buffers = [] # type: List[deque]
         for i in range(self.nchannels):
             self.channel_buffers.append(deque(maxlen=self.num_samples))
-        tx = np.fft.fftfreq(nsamples)
+        tx = np.fft.fftfreq(self.num_samples)
         self.mask = tx > 0
         self.x = tx[self.mask]
         self.nfreq = len(self.x)
 
-    def fft_channel(self, channel_seq):
+    def fft_channel(self, channel_seq: deque) -> np.array:
         seq = np.array(channel_seq)
         fft = np.fft.fft(seq)[self.mask]
-        return np.abs(fft[i] / self.num_samples) * 2
+        return np.abs(fft / self.num_samples) * 2
 
-    def tick(self, sample: np.array):
+    def tick(self, sample: np.array) -> Optional[List[np.array]]:
         for i in range(self.nchannels):
             self.channel_buffers[i].append(sample[i])
         self.sample_counter -= 1
         if self.sample_counter > 0:
             return None
-        return map(fft_channel, self.channel_buffers)
+        return list(map(self.fft_channel, self.channel_buffers))
 
 
-
-SCALE_FACTOR_EEG = (4500000)/24/(2**23-1) #uV/count
-SCALE_FACTOR_AUX = 0.002 / (2**4)
-
-def simple_scale(sample: bci.OpenBCISample):
-    return np.array(sample.channel_data)*SCALE_FACTOR_EEG
-
-
-def vec_to_csv(out, vec):
+def vec_to_csv(out: IO, vec: np.ndarray) -> None:
     a = np.array2string(vec, max_line_width=999999, separator=',')[1:-1] # skip [ & ]
     out.write('{}\n'.format(a))
 
 
-def sample_to_csv(out, sample):
-    vec_to_csv(out, simple_scale(sample))
-
-
-def sample_write_raw(out, sample):
-    out.write(sample)
-
-
-def open_record(name=None, srate=0, ext='csv', mode='w'):
+def open_record(name: str = None, srate: int = 0, ext: str = 'csv', mode: str = 'w') -> Callable[[T], T]:
     if not name:
         name = '{}_{}.{}'.format(datetime.now().strftime('%Y-%m-%d-%H:%M:%S'), srate, ext)
     name = 'records/' + name
     out = open(name, mode)
-    data = deque()
+    data = deque() # type: deque
 
-    def record_monitor():
+    def record_monitor() -> None:
         while should_run:
             time.sleep(1)
         print('INFO: Flushing {}'.format(name))
         for r in data:
-            a = np.array2string(r, max_line_width=999999, separator=',')[1:-1]
-            out.write('{}\n'.format(a))
+            if isinstance(r, np.ndarray):
+                a = np.array2string(r, max_line_width=999999, separator=',')[1:-1]
+                out.write('{}\n'.format(a))
+            else:
+                print('{} is not a np.array'.format(r))
         print('INFO: Done')
         out.close()
 
     Thread(target=record_monitor, name=name+'record_monitor').start()
 
-    def write(vec):
+    def write(vec: T) -> T:
         nonlocal data
         data.append(vec)
+        return vec
 
     return write
+
+def compact_duration(n: int) -> str:
+    hours = n // 3600
+    minutes = (n - hours * 3600) // 60
+    seconds = n - hours * 3600 - minutes * 60
+    if hours == 0:
+        if minutes == 0:
+            return '{}s'.format(seconds)
+        else:
+            return '{}m{}s'.format(minutes, seconds)
+    else:
+        return '{}h{}m{}s'.format(hours, minutes, seconds)

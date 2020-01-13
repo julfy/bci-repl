@@ -1,0 +1,20 @@
+{
+    "name": "test8ch",
+    "topology": "top_8c_10_20",
+    "sampling_rate": 250,
+    "commands": [
+        'connect',
+        // 'c C', // enable 16 channels
+        'c =', // test signal 1xAmplitude, fast pulse
+        'c K', // open file on SD card, 12h for 8ch on 250Hz
+        'sstart', // start stream
+        'sleep 60', // sleep 60 seconds
+        'sstop', //stop stream
+        'c j' // close SD card file
+    ],
+    "annotations": {
+        "onset": [5],
+        "duration": [10],
+        "description": ["test"]
+    }
+}
