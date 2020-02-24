@@ -1,1 +1,8 @@
 bluepy
+numpy
+mttkinter
+OpenBCI-Python
+opencv-python
+vlc-ctrl
+sortedcontainers
+mne
