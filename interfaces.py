@@ -46,8 +46,9 @@ class Source(Generic[T]):
         raise NotImplemented
 
     @classmethod
-    def convert_txt(self, name: str, params:Parameters) -> Any:
+    def import_data(self, name: str, params:Parameters) -> Any:
         raise NotImplemented
+
 
 class SubprocessInterface:
     # Possible TODO: replace Class with enum selector for moar separation

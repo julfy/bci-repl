@@ -63,7 +63,10 @@ class CytonSource(Source[bci.OpenBCICyton]):
     def setup(self, params: Parameters, port: str) -> bci.OpenBCICyton:
         # timeout to handle case when board will not stream because of SPS > 250 (v3.1.2-freeSD)
         board = bci.OpenBCICyton(port=port, scaled_output=False, log=True, timeout=3)
+        time.sleep(0.5)
         board.ser_write(sampling_rate_string(params.sampling_rate))
+        time.sleep(0.5)
+        board.print_incoming_text()
         return board
 
     @classmethod
@@ -100,15 +103,39 @@ class CytonSource(Source[bci.OpenBCICyton]):
                 # break
 
     @classmethod
-    def convert_txt(self, name: str, params:Parameters) -> RawArray:
-        samples = list(convert_openbci_input(name, params.nchannels))
-        arr = np.array(samples).transpose()
-        scale = 1.0 / np.amax(arr) * 3
+    def convert_csv(self, name: str, params: Parameters) -> RawArray:
+        with open(name, 'r') as inp:
+            samples = [[float(s) for s in l.split(',')] for l in inp]
+        arr = np.array(samples).transpose()  # group by channel
+        scaled = np.divide(arr, np.amax(arr, axis=1)[:, np.newaxis])
         info = mne.create_info(
             ch_names=params.electrode_topology,
             sfreq = params.sampling_rate,
             ch_types = 'eeg',
             verbose = None
         )
-        raw = RawArray(arr * scale, info)
+        raw = RawArray(scaled, info)
         return raw
+
+    @classmethod
+    def convert_txt(self, name: str, params:Parameters) -> RawArray:
+        samples = list(convert_openbci_input(name, params.nchannels))
+        arr = np.array(samples).transpose()
+        scaled = np.divide(arr, np.amax(arr, axis=1)[:, np.newaxis])
+        info = mne.create_info(
+            ch_names=params.electrode_topology,
+            sfreq = params.sampling_rate,
+            ch_types = 'eeg',
+            verbose = None
+        )
+        raw = RawArray(scaled, info)
+        return raw
+
+    @classmethod
+    def import_data(self, name: str, params:Parameters) -> RawArray:
+        if name.lower().endswith('.txt'):
+            return self.convert_txt(name, params)
+        elif name.lower().endswith('.csv'):
+            return self.convert_csv(name, params)
+        else:
+            raise Exception('Unsupported format; txt or csv expected')

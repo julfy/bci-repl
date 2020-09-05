@@ -39,6 +39,7 @@ class VoltageChannel:
         c.create_window(10, offset, anchor=tk.NW, window=inframe)
         self.sub_canvas.create_line(0, H/2, W, H/2, fill='#aaaaaa') # middle
         self.header = self.sub_canvas.create_text(20, 10, text=self.name)
+        self.period = utils.period_function(1.0, lambda: True)
 
     def _update_header(self, avg, amplitude):
         self.sub_canvas.delete(self.header)
@@ -102,6 +103,7 @@ class Voltages(Panel):
         self.period = utils.period_function(1.0, lambda: True)
 
     def update(self, vec: Sequence[float]) -> None:
+        print(vec)
         if self.period():
             print(vec)
         for i in range(self.nchannels):

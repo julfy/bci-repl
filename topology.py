@@ -79,11 +79,19 @@ top_16c_10_10 = [ # occipital
     'P7', 'P3', 'PZ', 'P4', 'P8',
     'PO7', 'PO3', 'POZ', 'PO4', 'PO8',
     'O1', 'O2']
+top_16c_obci_10_20 = [
+    # 'Fp1', 'Fp2',
+    'F7', 'F3', 'F4', 'F8', # 'FZ',
+    'T7', 'C3', 'CZ', 'C4', 'T8',
+    'P7', 'P3', 'PZ', 'P4', 'P8',
+    'O1', 'O2'
+]
 
 topologies = {
     'all': [k for k in electrodes.keys()],
     'top_8c_10_20': top_8c_10_20,
-    'top_16c_10_10': top_16c_10_10
+    'top_16c_10_10': top_16c_10_10,
+    'top_16c_obci_10_20': top_16c_obci_10_20,
 }
 
 

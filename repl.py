@@ -3,12 +3,16 @@ T = TypeVar('T')
 TFun = TypeVar('TFun', bound=Callable[..., Any])
 Args = List[str]
 
+from multiprocessing import Process
+import os
+import random
+import sys
 import time
 import traceback
 from threading import Thread
 from collections import namedtuple
 
-from base import Context, Session
+from base import Session
 from interfaces import SubprocessInterface
 from tkinter_gui import TkInterGui
 import utils
@@ -71,20 +75,21 @@ def in_thread(f: T) -> T:
 ## COMMANDS ###
 
 @defcmd('e', '<expr># - evaluate string as a code')
-def cmd_eval(ctx: Context, *s: str) -> None:
-    eval(' '.join(s))
+def cmd_eval(ssn: Session, *s: str) -> None:
+    expr = ' '.join(s)
+    exec(expr)
 
 
 @defcmd(['exit', 'q'], '# - stop everything and exit repl')
-def cmd_exit(ctx: Context) -> None:
+def cmd_exit(ssn: Session) -> None:
     utils.should_run = False
-    cmd_sstop(ctx) #  stop stream just in case
-    if ctx.gui:
-        ctx.gui.stop()
+    cmd_sstop(ssn) #  stop stream just in case
+    if ssn.gui:
+        ssn.gui.stop()
 
 
 @defcmd(['help', 'h'], '[cmd]# - show help')
-def cmd_help(ctx: Context, cmd_name: str = None) -> None:
+def cmd_help(ssn: Session, cmd_name: str = None) -> None:
     def fmthelp(cmd: str, v: Cmd) -> str:
         opts, doc = v.help.split('#', maxsplit=1)
         return'{:15} {:30}\t{}'.format(cmd, opts, doc)
@@ -96,21 +101,21 @@ def cmd_help(ctx: Context, cmd_name: str = None) -> None:
         print(fmthelp(cmd_name, G_cmds[cmd_name]))
 
 @defcmd('sleep', '<seconds># - pause')
-def cmd_sleep(ctx: Context, duration: float) -> None:
+def cmd_sleep(ssn: Session, duration: float) -> None:
     time.sleep(float(duration))
 
 @defcmd('gui', '<start|stop># - start/stop GUI; default: start')
-def cmd_gui(ctx: Context, action: str = 'start') -> None:
-    if ctx.gui is not None and action == 'start':
+def cmd_gui(ssn: Session, action: str = 'start') -> None:
+    if ssn.gui is not None and action == 'start':
         raise Exception('GUI already runnng')
-    elif ctx.gui is not None and action == 'stop':
-        ctx.gui.stop()
-        ctx.gui = None
-    elif ctx.gui is None and action == 'start':
-        gui = SubprocessInterface(TkInterGui, ctx.params)
-        ctx.gui = gui
-        ctx.add_callback(gui.callback)
-    elif ctx.gui is None and action == 'stop':
+    elif ssn.gui is not None and action == 'stop':
+        ssn.gui.stop()
+        ssn.gui = None
+    elif ssn.gui is None and action == 'start':
+        gui = SubprocessInterface(TkInterGui, ssn.params)
+        ssn.gui = gui
+        ssn.add_callback(gui.callback)
+    elif ssn.gui is None and action == 'stop':
         raise Exception('No GUI to stop')
     else:
         raise Exception('Expected start|stop')
@@ -118,97 +123,99 @@ def cmd_gui(ctx: Context, action: str = 'start') -> None:
 
 @defcmd('csv', '<csv># - replay preprocessed csv file')
 @in_thread
-def cmd_csv(ctx: Context, fname: str) -> None:
+def cmd_csv(ssn: Session, fname: str) -> None:
     import csv
     with open(fname, 'r') as inp:
         for l in csv.reader(inp):
             if not utils.should_run:
                 break
-            ctx.callback(list(map(float,l)))
-            time.sleep(1.0/ctx.params.sampling_rate) # TODO: save srate in file
+            ssn.callback(list(map(float,l)))
+            time.sleep(1.0/ssn.params.sampling_rate) # TODO: save srate in file
 
 
 @defcmd('connect', '[port]# - connect to board')
-def cmd_connect(ctx: Context, port: str = '/dev/ttyUSB0') -> None:
-    ctx.board = ctx.params.Source.setup(ctx.params, port)
+def cmd_connect(ssn: Session, port: str = '/dev/ttyUSB0') -> None:
+    ssn.board = ssn.params.Source.setup(ssn.params, port)
 
 
 @defcmd('import', '[fname]# - import EEG data; default: SD card file name')
-def cmd_import(ctx: Context, fname: Optional[str] = None) -> None:
-    if ctx.session:
-        ctx.session.import_data(ctx, fname)
+def cmd_import(ssn: Session, fname: Optional[str] = None) -> None:
+    ssn.import_data(fname)
 
 
 @defcmd('save_session', '[fname]# - save session')
-def cmd_save_session(ctx: Context, fname: Optional[str] = None) -> None:
-    if ctx.session:
-        ctx.session.save(fname)
+def cmd_save_session(ssn: Session, fname: Optional[str] = None) -> None:
+    ssn.save(fname)
 
 @defcmd('plot_session', '# - display session graph')
-def cmd_plot_session(ctx: Context) -> None:
-    if ctx.session:
-        ctx.session.plot(ctx)
+def cmd_plot_session(ssn: Session) -> None:
+    if ssn.data:
+        ssn.data.plot(
+            n_channels = ssn.params.nchannels,
+            duration=ssn.tstop - ssn.tstart,
+            show=True,
+            block=True,
+            scalings = 'auto'
+        )
 
 
 @defcmd('record_local', '<file># - open a new file to save data to')
-def cmd_record_local(ctx: Context, fname: str) -> None:
+def cmd_record_local(ssn: Session, fname: str) -> None:
     from utils import open_record
 
-    writer = open_record(name=fname, srate=ctx.params.sampling_rate)
-    ctx.add_callback(writer)
+    writer = open_record(name=fname, srate=ssn.params.sampling_rate)
+    ssn.add_callback(writer)
 
 
 @defcmd('record_sd', '<mode:ASFGHJKLa># - open a new file on SD card')
-def cmd_record(ctx: Context, mode: str) -> None:
+def cmd_record(ssn: Session, mode: str) -> None:
     if mode not in 'ASFGHJKLa':
         raise ArgError('expected mode: A|S|F|G|H|J|K|L|a')
-    if not ctx.board:
+    if not ssn.board:
         raise Exception('Board not present!')
-    ctx.board.ser_write(mode.encode())
+    ssn.board.ser_write(mode.encode())
     time.sleep(0.5)
-    if ctx.board.ser.inWaiting():
+    if ssn.board.ser.inWaiting():
         line = ''
         c = ''
         while '$$$' not in line:
-            c = ctx.board.ser.read().decode('utf-8', errors='replace')
+            c = ssn.board.ser.read().decode('utf-8', errors='replace')
             line += c
         b,e = line.find('OBCI'),line.find('.TXT')
         if b < 0 or e < 0:
             raise Exception('No file open confirmation: {}'.format(line))
         print(line)
-        ctx.session.sd_out_file = line[b:e+4]
+        ssn.sd_out_file = line[b:e+4]
     else:
         raise Exception('No answer')
 
 
 @defcmd('sstart', '# - start streaming from the board')
 @in_thread
-def cmd_sstart(ctx: Context) -> None:
-    if ctx.board and not ctx.board.streaming:
-        if ctx.session:
-            ctx.session.start()
-        ctx.board.start_streaming(ctx.callback)
+def cmd_sstart(ssn: Session) -> None:
+    if ssn.board and not ssn.board.streaming:
+        ssn.start()
+        ssn.board.start_streaming(ssn.callback)
     else:
         raise Exception('No board connected')
 
 
 @defcmd('sstop', '# - stop stream')
-def cmd_sstop(ctx: Context) -> None:
-    if ctx.board and ctx.board.streaming:
-        ctx.board.stop()
-    if ctx.session:
-        ctx.session.stop()
+def cmd_sstop(ssn: Session) -> None:
+    if ssn.board and ssn.board.streaming:
+        ssn.board.stop()
+    ssn.stop()
 
 
-@defcmd('vrun', '<file># - start video with data collection; board should be preconfigured')
-def cmd_vstart(ctx: Context, inp_file: str) -> None:
+@defcmd('video', '<file># - start video with data collection; board should be preconfigured')
+def cmd_vstart(ssn: Session, inp_file: str) -> None:
     import subprocess
-    import os
     from vlc_ctrl.player import Player
 
     if not inp_file or len(inp_file) <= 0:
         raise ArgError('Video file name expected')
 
+    input('Press Enter to start...')
     with open(os.devnull,"w") as out:
         p = Player()
         subprocess.Popen(['vlc', inp_file], stderr=out)
@@ -225,26 +232,64 @@ def cmd_vstart(ctx: Context, inp_file: str) -> None:
         p.quit(None, None, 0)
 
 
+@defcmd('slideshow', '<dir> <delay> <duration> <rest> [bg]# - start presentation of pictures in directory; board should be preconfigured')
+def cmd_pstart(ssn: Session, dirname: str, delay: float, duration: float, rest: float, bg: str = '#000000') -> None:
+    from slideshow import Slideshow
+
+    dirname, delay, duration, rest, bg = (dirname, float(delay), float(duration), float(rest), bg)
+    def f(dir: str, delay: float, duration: float, rest: float, bg: str, seed: int) -> None:
+        oldstd = sys.stderr
+        with open(os.devnull, "w") as out:
+            sys.stderr = out
+            slideshow = Slideshow(dir, delay, duration, rest, bg, seed)
+            slideshow.start()
+        sys.stderr = oldstd
+
+    # generate annotations
+    files = [f.split('.')[0] for f in os.listdir(dirname)]
+    random.Random(ssn.random_seed).shuffle(files)
+    onset = [delay+i*(duration + rest) for i in range(len(files))]
+    durations = [duration] * len(files)
+    ssn.annotations['onset'] = ssn.annotations['onset'] + onset
+    ssn.annotations['duration'] = ssn.annotations['duration'] + durations
+    ssn.annotations['description'] = ssn.annotations['description'] + files
+
+    # Confirmation
+    print ('Slideshow:\n  Files: {} ({})\n  Estimated duration: {}\n'.format(
+        dirname, len(files),
+        delay+len(files)*(duration+rest)
+    ))
+    input('Press Enter to start...')
+    # start recording
+    cmd_sstart(ssn)
+
+    p = Process(target=f, args=(dirname, delay, duration, rest, bg, ssn.random_seed))
+    p.start()
+    p.join()
+
+    # stop recording
+    cmd_sstop(ssn)
+
 @defcmd('c', '<command># - command to send to the board')
-def cmd_c(ctx: Context, *args: str) -> None:
-    if not ctx.board:
+def cmd_c(ssn: Session, *args: str) -> None:
+    if not ssn.board:
         raise Exception('Board not present!')
-    ctx.board.ser_write(' '.join(args).encode())
+    ssn.board.ser_write(' '.join(args).encode())
     time.sleep(0.5)
-    ctx.board.print_incoming_text()
+    ssn.board.print_incoming_text()
 
 
 @defcmd('rand', '<start|stop># - generate random noise')
 @in_thread
-def cmd_rand(ctx: Context) -> None:
-    ctx.params.Source.gen_rand(ctx.params, ctx.callback)
+def cmd_rand(ssn: Session) -> None:
+    ssn.params.Source.gen_rand(ssn.params, ssn.callback)
 
 
-def exec_cmd(cmd: str, ctx: Context, args: List) -> None:
-    G_cmds[cmd].func(ctx, *args)
+def exec_cmd(cmd: str, ssn: Session, args: List) -> None:
+    G_cmds[cmd].func(ssn, *args)
 
 
-def repl(ctx: Context) -> None:
+def repl(ssn: Session) -> None:
     while utils.should_run:
         full_cmd = input(">>> ").split(' ') # TODO: escape chars
         if not full_cmd or len(full_cmd) <= 0:
@@ -254,7 +299,7 @@ def repl(ctx: Context) -> None:
         if cmd == '':
             pass
         elif cmd in G_cmds:
-            exec_cmd(cmd, ctx, args)
+            exec_cmd(cmd, ssn, args)
         else:
             print('Unknown cmd: {}'.format(cmd))
 
