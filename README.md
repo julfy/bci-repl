@@ -4,4 +4,4 @@ Now only has basic support for OpenBCI Cyton board.
 
 ## Notes
 
-SD file sizes are sized for 8 channel on 250hz data rate, to know what size you neeed apply: <necessary time>*(<number of channels>/8)*(<sampling rate>/250)
+SD file sizes are baselined for 8 channel on 250hz sample rate, apply following formula to estimate required size: `<necessary time>*(<number of channels>/8)*(<sampling rate>/250)`
