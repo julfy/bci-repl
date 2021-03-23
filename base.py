@@ -1,7 +1,11 @@
 import pickle
 import random
 import time
+
 import mne
+import re
+import json
+
 
 from typing import List, Optional, Callable, TypeVar, Dict, Any
 T = TypeVar('T')
@@ -54,7 +58,7 @@ class Scenario:
     def run(self, ssn: 'Session', executor: Callable) -> None:
         print('Running scenario {}'.format(self.name))
         self.start = int(time.time())
-        while self.step(ssn):
+        while self.step(ssn, executor):
             pass
         self.stop = int(time.time())
         print('Finished scenario in {}'.format(utils.compact_duration(self.stop-self.start)))
@@ -92,7 +96,6 @@ class Session:
         res = inp
         for f in self.callback_seq:
             res = f(res)
-            print(res)
         return res
         # return reduce(lambda val, f: f(val), G_callback_seq, initial=inp)
 
@@ -107,7 +110,7 @@ class Session:
             self.data.set_annotations(a)  # type: ignore
 
         if self.tstop == 0.0 and self.data is not None:
-            self.tstop = self.tstart + (self.data.n_times / self.sampling_rate)
+            self.tstop = self.tstart + (self.data.n_times / self.params.sampling_rate)
 
     def __str__(self) -> str:
         pretty = """Session: {} ({} - {})

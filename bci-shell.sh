@@ -9,4 +9,4 @@ if [[ -z $rlwrap ]]; then
 	echo '### Install rlwrap for better experience';
 fi;
 
-$rlwrap python3.5 main.py $@
+$rlwrap python3 main.py $@

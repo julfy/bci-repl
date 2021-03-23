@@ -2,9 +2,6 @@ from typing import List, Optional, Any, Callable, Dict, Union, TypeVar, cast
 T = TypeVar('T')
 
 import sys
-import json
-import re
-import time
 import argparse
 
 from base import Scenario, Session

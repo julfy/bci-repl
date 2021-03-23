@@ -77,7 +77,7 @@ def vec_to_csv(out: IO, vec: np.ndarray) -> None:
 
 def open_record(name: str = None, srate: int = 0, ext: str = 'csv', mode: str = 'w') -> Callable[[T], T]:
     if not name:
-        name = '{}_{}.{}'.format(datetime.now().strftime('%Y-%m-%d-%H:%M:%S'), srate, ext)
+        name = f'{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}_{srate}.{ext}'
     name = 'records/' + name
     out = open(name, mode)
     data = deque() # type: deque
@@ -85,15 +85,15 @@ def open_record(name: str = None, srate: int = 0, ext: str = 'csv', mode: str = 
     def record_monitor() -> None:
         while should_run:
             time.sleep(1)
-        print('INFO: Flushing {}'.format(name))
+        if len(data) > 0:
+            print('INFO: Flushing {}'.format(name))
         for r in data:
             if isinstance(r, np.ndarray):
-                a = np.array2string(r, max_line_width=999999, separator=',')[1:-1]
-                out.write('{}\n'.format(a))
+                out.write(','.join([str(i) for i in r])+'\n')
             else:
                 print('{} is not a np.array'.format(r))
-        print('INFO: Done')
         out.close()
+        data.clear()
 
     Thread(target=record_monitor, name=name+'record_monitor').start()
 

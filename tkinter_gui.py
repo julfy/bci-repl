@@ -103,9 +103,6 @@ class Voltages(Panel):
         self.period = utils.period_function(1.0, lambda: True)
 
     def update(self, vec: Sequence[float]) -> None:
-        print(vec)
-        if self.period():
-            print(vec)
         for i in range(self.nchannels):
             self.channels[i].update(vec[i])
 

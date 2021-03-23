@@ -63,6 +63,7 @@ class CytonSource(Source[bci.OpenBCICyton]):
     def setup(self, params: Parameters, port: str) -> bci.OpenBCICyton:
         # timeout to handle case when board will not stream because of SPS > 250 (v3.1.2-freeSD)
         board = bci.OpenBCICyton(port=port, scaled_output=False, log=True, timeout=3)
+        # board = FakeBoard(params.sampling_rate)
         time.sleep(0.5)
         board.ser_write(sampling_rate_string(params.sampling_rate))
         time.sleep(0.5)
@@ -87,20 +88,6 @@ class CytonSource(Source[bci.OpenBCICyton]):
             sample = bci.OpenBCISample(None, [random.randrange(-255,255)] * params.nchannels, None)
             callback(sample)
             time.sleep(1.0/params.sampling_rate)
-
-    @classmethod
-    def gen_sin(self, params: Parameters, callback : Callable[[bci.OpenBCISample], None]) -> None:
-        phase = 0.0
-        cnt = 0
-        while utils.should_run:
-            sample = bci.OpenBCISample(None, [np.sin(phase+i)*4500 for i in range(params.nchannels)], None)
-            phase+=0.05
-            callback(sample)
-            time.sleep(1.0/20)
-            # cnt+=1
-            # if cnt > 1000:
-                # should_stop()
-                # break
 
     @classmethod
     def convert_csv(self, name: str, params: Parameters) -> RawArray:
@@ -139,3 +126,47 @@ class CytonSource(Source[bci.OpenBCICyton]):
             return self.convert_csv(name, params)
         else:
             raise Exception('Unsupported format; txt or csv expected')
+
+
+class FakeBoard:
+    class Ser:
+        def __init__(self):
+            self.buf = b''
+
+        def write(self, s):
+            self.buf = self.buf + s
+
+        def inWaiting(self):
+            return len(self.buf) > 0
+
+        def read(self):
+            t = self.buf
+            self.buf = b''
+            return t
+
+    def __init__(self, sr, *args, **kwargs):
+        self.ser = FakeBoard.Ser()
+        self.streaming = False
+        self.sampling_rate = sr
+
+    def ser_write(self, cmd):
+        self.ser.write(b'|cmd: '+ cmd + b'|')
+
+    def print_incoming_text(self):
+        print(self.ser.read().decode('utf-8'))
+
+    def start_streaming(self, cb):
+        self.streaming = True
+        self.gen_sin(cb)
+
+    def stop(self):
+        self.streaming = False
+
+    def gen_sin(self, callback : Callable[[bci.OpenBCISample], None]) -> None:
+        phase = 0.0
+        step = 1.0/self.sampling_rate
+        while self.streaming:
+            sample = bci.OpenBCISample(None, [(np.sin(phase) + (np.sin(10*phase)/5 if i > 4 else (np.sin(phase*60) if i == 3 else 0)))*4500 for i in range(8)], None)
+            phase += step * 2 * np.pi
+            callback(sample)
+            time.sleep(1.0/self.sampling_rate)

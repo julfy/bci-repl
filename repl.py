@@ -147,7 +147,7 @@ def cmd_import(ssn: Session, fname: Optional[str] = None) -> None:
 def cmd_save_session(ssn: Session, fname: Optional[str] = None) -> None:
     ssn.save(fname)
 
-@defcmd('plot_session', '# - display session graph')
+@defcmd('plot', '# - display session graph')
 def cmd_plot_session(ssn: Session) -> None:
     if ssn.data:
         ssn.data.plot(
@@ -159,7 +159,7 @@ def cmd_plot_session(ssn: Session) -> None:
         )
 
 
-@defcmd('record_local', '<file># - open a new file to save data to')
+@defcmd('record_local', '<file># - open a new file to save data to; need to close shell to flush')
 def cmd_record_local(ssn: Session, fname: str) -> None:
     from utils import open_record
 
